@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Debug Format to JSON Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #c5c5c5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+
+        h1 {
+            color: #f4f4f4;
+            margin-bottom: 20px;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            height: calc(100vh - 140px);
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        textarea, pre {
+            flex: 1;
+            height: 100%;
+            font-family: monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background-color: #2d2d2d;
+            color: #c5c5c5;
+            resize: none;
+            overflow-y: auto;
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        pre {
+            white-space: pre-wrap;
+        }
+
+        .buttonContainer {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #copyButton, #demoButton {
+            padding: 8px 12px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #copyButton {
+            background-color: #007acc;
+        }
+
+        #copyButton:hover {
+            background-color: #005fa3;
+        }
+
+        #demoButton {
+            background-color: #4caf50;
+        }
+
+        #demoButton:hover {
+            background-color: #388e3c;
+        }
+
+        .string { color: #ce9178; }
+        .number { color: #b5cea8; }
+        .boolean { color: #569cd6; }
+        .null { color: #569cd6; }
+        .key { color: #9cdcfe; }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                height: auto;
+            }
+
+            textarea, pre {
+                width: 100%;
+                height: 200px;
+            }
+
+            .buttonContainer {
+                flex-direction: column;
+                margin-top: 20px;
+            }
+
+            #copyButton, #demoButton {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Rust Debug Format to JSON Converter</h1>
+    <div class="container">
+        <textarea id="inputArea" placeholder="Paste your Rust Debug format here..."></textarea>
+        <pre id="outputArea"></pre>
+    </div>
+    <div class="buttonContainer">
+        <button id="demoButton">Demo</button>
+        <button id="copyButton">Copy</button>
+    </div>
+
+    <script>
+        document.getElementById('inputArea').addEventListener('input', function () {
+            const debugStr = this.value;
+            const jsonStr = convertDebugToJson(debugStr);
+            document.getElementById('outputArea').innerHTML = jsonStr;
+        });
+
+        document.getElementById('copyButton').addEventListener('click', function () {
+            const outputText = document.getElementById('outputArea').textContent;
+            navigator.clipboard.writeText(outputText).then(() => {
+                alert("JSON copied to clipboard!");
+            });
+        });
+
+        document.getElementById('demoButton').addEventListener('click', function () {
+            const demoText = `RangeBlockComponentsRequest { blocks: [], blobs: [], data_columns: [
+    DataColumnSidecar { index: 24, column: VariableList { vec: [FixedVector { vec: [0, 47, 61] } ] }, 
+    kzg_commitments: VariableList { vec: [0x95d380004726cf04adb4612226de47d61422dd32913b1216cad3ef901bc80965f4f3726ea8e7d2309d1a9061529b44c6] }, 
+    kzg_proofs: VariableList { vec: [0x8f42186e93ab41265419a3e7b04a619d56e6ec8183453fba89d8d79ecbd8e0458bdbf4d56f70985aa661b1c517c350dc] }, 
+    signed_block_header: SignedBeaconBlockHeader { 
+        message: BeaconBlockHeader { 
+            slot: Slot(13024), proposer_index: 11, 
+            parent_root: 0xd03f57b8e518eb89544017f282b13a3d712912eb5b7c255e5ff53e4625d5ed91, 
+            state_root: 0xe66208896302fd7fe449593245e70f7dd3053bad2c9c8d000aecf7fb8ca182a5, 
+            body_root: 0x3d3a563aedafd03ee16668088646c1c35a0f8f85865f363dad46adde92578d01 
+        }, 
+        signature: 0x9332777ab9e9c49448bf437e1815f80f08e421d1d052bbb015c7682f22ca9541fb959eceadea7b5fdbd2378f5d58c68b1041129d7bc26cc779f46b4511c3f11ca23ffcccf1bb6d343b2335b5be6e912b8fe178f29680f408c77040e2f9b8a7ef }, 
+        kzg_commitments_inclusion_proof: FixedVector { vec: [0x792930bbd5baac43bcc798ee49aa8185ef76bb3b44ba62b91d86ae569e4bb535] } 
+    }
+] }`;
+            document.getElementById('inputArea').value = demoText;
+            document.getElementById('inputArea').dispatchEvent(new Event('input'));
+        });
+
+        function convertDebugToJson(debugStr) {
+            try {
+                let transformedStr = replaceFieldNames(debugStr); // Step 1
+                transformedStr = handlePositionalStructs(transformedStr); // Step 2
+                transformedStr = replaceOptionTypes(transformedStr); // Step 3
+                transformedStr = handleHexadecimalValues(transformedStr); // Step 4
+                transformedStr = handleTuplesAndLists(transformedStr); // Step 5
+                transformedStr = handleEnumsWithStructs(transformedStr); // Step 6
+                transformedStr = handleStructs(transformedStr); // Step 7
+                transformedStr = cleanUpEmptyFields(transformedStr); // Step 8
+
+                const obj = JSON.parse(transformedStr);
+                const prettyJson = JSON.stringify(obj, null, 2);
+                return syntaxHighlight(prettyJson); // Return JSON with syntax highlighting
+            } catch (e) {
+                return `<span style="color: #d32f2f;">JSON is invalid ❌<br>Reason: ${e.message}</span>`;
+            }
+        }
+
+        function replaceFieldNames(str) {
+            // Replace Rust struct field names with JSON keys
+            return str.replace(/([a-zA-Z_][a-zA-Z0-9_]*):\s?/g, '"$1": ');
+        }
+
+        function replaceOptionTypes(str) {
+            // Handle Rust's Option types: Some(value) -> value, None -> null
+            return str.replace(/\bNone\b/g, 'null').replace(/\bSome\(/g, '').replace(/\)/g, '');
+        }
+
+        function handlePositionalStructs(str) {
+            // Convert positional structs like Slot(13024) to JSON objects with type and values (as an array)
+            return str.replace(/(\w+)\(([\d,\s]+)\)/g, function(_, typeName, values) {
+                const valueArray = values.split(',').map(v => parseInt(v.trim()));
+                return `{"type": "${typeName}", "values": [${valueArray.join(', ')}]}`;
+            });
+        }
+
+        function handleHexadecimalValues(str) {
+            // Convert hex values to strings to be JSON-compatible
+            return str.replace(/\b0x[a-fA-F0-9]+\b/g, match => `"${match}"`);
+        }
+
+        function handleTuplesAndLists(str) {
+            // Convert tuples and lists from Rust's format to JSON arrays
+            return str.replace(/\(/g, '[').replace(/\)/g, ']').replace(/,?\s*\[\s*\]/g, '[]');
+        }
+
+        function handleEnumsWithStructs(str) {
+            // Convert enums with struct-like components to JSON objects with `type` and `enum` fields
+            return str.replace(/(\w+)::(\w+)\s*{([^}]*)}/g, function(_, enumName, variantName, fields) {
+                return `{"type": "${variantName}", "enum": "${enumName}", ${fields.trim()}}`;
+            });
+        }
+
+        function handleStructs(str) {
+            // Convert Rust structs to JSON objects
+            return str.replace(/\b(\w+)\s*\{/g, '{"type": "$1",');
+        }
+
+        function cleanUpEmptyFields(str) {
+            // Remove empty fields in the form of `"field": {},`
+            return str.replace(/"\w+": \{\},?/g, '');
+        }
+
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return `<span class="${cls}">${match}</span>`;
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const style = document.createElement('style');
+            style.innerHTML = `
+                pre { background: #2d2d2d; border-radius: 5px; padding: 10px; color: #c5c5c5; white-space: pre-wrap; height: 100%; }
+                .string { color: #ce9178; }
+                .number { color: #b5cea8; }
+                .boolean { color: #569cd6; }
+                .null { color: #569cd6; }
+                .key { color: #9cdcfe; }
+            `;
+            document.head.appendChild(style);
+        });
+    </script>
+</body>
+</html>
